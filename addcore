@@ -2,16 +2,36 @@
 
 set -euo pipefail
 
-file=$(basename $1)
+# 如果没有参数，则自动处理当前目录下所有 .so 文件
+if [ $# -eq 0 ]; then
+    files=(*.so)
+else
+    files=("$@")
+fi
 
-indexout=$(echo -n "$(date +%Y-%m-%d)" \
-"$(crc32 $file)" \
-"$(echo $file.zip)")
+for filepath in "${files[@]}"; do
+    # 只处理存在且是普通文件的情况
+    [ -f "$filepath" ] || continue
 
-zip "$file.zip" $file
-sed -i /$file.zip/d .index-extended
-echo "$indexout" >> .index-extended
-sed -i /$file.zip/d .index
-echo "$file.zip" >> .index
-
-rm $file
+    file=$(basename "$filepath")
+    
+    # 计算 CRC32（确保 crc32 命令已安装，或用下面的 Python 替代）
+    # 如果你还没装 crc32，可以用这句替代：
+    # crc32_val=$(python3 -c "import sys, binascii; print(binascii.crc32(open(sys.argv[1],'rb').read()) & 0xffffffff)" "$filepath")
+    crc32_val=$(crc32 "$filepath")   # 假设已安装 crc32 命令
+    
+    indexout=$(echo -n "$(date +%Y-%m-%d) $crc32_val ${file}.zip")
+    
+    # 压缩
+    zip "${file}.zip" "$filepath"
+    
+    # 更新索引（删除旧条目，添加新条目）
+    sed -i "/${file}.zip/d" .index-extended
+    echo "$indexout" >> .index-extended
+    
+    sed -i "/${file}.zip/d" .index
+    echo "${file}.zip" >> .index
+    
+    # 删除原始文件
+    rm "$filepath"
+done
